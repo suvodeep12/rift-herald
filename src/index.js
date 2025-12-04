@@ -1,9 +1,5 @@
-// The new, lean main file: src/index.js
-require("dotenv").config({ path: ".env" });
-
-require("dotenv").config(); // This line should already be there
-console.log("DEBUG KEY CHECK:", process.env.RIOT_API_KEY); // <--- Add this
-
+// src/index.js
+require("dotenv").config();
 const fs = require("fs");
 const path = require("path");
 const { Client, Collection, GatewayIntentBits } = require("discord.js");
@@ -15,6 +11,7 @@ const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs
   .readdirSync(commandsPath)
   .filter((file) => file.endsWith(".js"));
+
 for (const file of commandFiles) {
   const filePath = path.join(commandsPath, file);
   const command = require(filePath);
@@ -25,6 +22,7 @@ const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs
   .readdirSync(eventsPath)
   .filter((file) => file.endsWith(".js"));
+
 for (const file of eventFiles) {
   const filePath = path.join(eventsPath, file);
   const event = require(filePath);
@@ -36,5 +34,4 @@ for (const file of eventFiles) {
 }
 
 client.login(process.env.DISCORD_TOKEN);
-
 console.log("Riot API Key loaded:", process.env.RIOT_API_KEY?.slice(0, 5));

@@ -1,32 +1,65 @@
 const db = require("../core/database");
-const { getRankedData } = require("../core/riot-api"); // You might need to export a new match fetcher here
+const { getRankedData } = require("../core/riot-api");
 const { createUpdateEmbed } = require("../utils/embeds");
-const { LolApi, Constants } = require("twisted"); // Import Twisted directly for the match fetch
+const fetch = require("node-fetch"); // We use direct fetch for total control
 
-// Initialize API for Match fetching
-const api = new LolApi({ key: process.env.RIOT_API_KEY });
+// Clean the key (Fixes whitespace issues)
+const apiKey = process.env.RIOT_API_KEY ? process.env.RIOT_API_KEY.trim() : "";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// HELPER: Map specific server to the correct Riot Regional Cluster
+function getRegionalHost(region) {
+  const r = region.toLowerCase();
+  // NA/SA -> Americas
+  if (["na1", "br1", "la1", "la2"].includes(r))
+    return "americas.api.riotgames.com";
+  // KR/JP -> Asia
+  if (["kr", "jp1"].includes(r)) return "asia.api.riotgames.com";
+  // EU -> Europe
+  if (["eun1", "euw1", "tr1", "ru"].includes(r))
+    return "europe.api.riotgames.com";
+  // OCE/SEA -> SEA (This is the critical fix for SG2)
+  if (["oc1", "ph2", "sg2", "th2", "tw2", "vn2"].includes(r))
+    return "sea.api.riotgames.com";
+
+  // Default to SEA if unsure (safest for your use case)
+  return "sea.api.riotgames.com";
+}
+
 async function getLastMatchStats(puuid, region) {
+  const host = getRegionalHost(region);
+
   try {
-    // 1. Get Match ID (RegionGroup ASIA for SG2)
-    const matches = await api.Match.list(puuid, Constants.RegionGroups.ASIA, {
-      count: 1,
+    // 1. Get Match ID List
+    const listUrl = `https://${host}/lol/match/v5/matches/by-puuid/${puuid}/ids?start=0&count=1`;
+    const listRes = await fetch(listUrl, {
+      headers: { "X-Riot-Token": apiKey },
     });
-    if (matches.response.length === 0) return null;
+
+    if (listRes.status === 403)
+      throw new Error(`403 Forbidden on List URL: ${listUrl}`);
+    if (!listRes.ok) throw new Error(`Status ${listRes.status} on List URL`);
+
+    const matchIds = await listRes.json();
+    if (!matchIds || matchIds.length === 0) return null;
 
     // 2. Get Match Details
-    const matchData = await api.Match.get(
-      matches.response[0],
-      Constants.RegionGroups.ASIA
-    );
+    const matchId = matchIds[0];
+    const detailUrl = `https://${host}/lol/match/v5/matches/${matchId}`;
+    const detailRes = await fetch(detailUrl, {
+      headers: { "X-Riot-Token": apiKey },
+    });
 
-    // 3. Find our player
-    const participant = matchData.response.info.participants.find(
+    if (!detailRes.ok)
+      throw new Error(`Status ${detailRes.status} on Match Detail`);
+
+    const matchData = await detailRes.json();
+
+    // 3. Extract Info
+    const participant = matchData.info.participants.find(
       (p) => p.puuid === puuid
     );
-
     if (!participant) return null;
 
     return {
@@ -38,8 +71,8 @@ async function getLastMatchStats(puuid, region) {
       cs: participant.totalMinionsKilled + participant.neutralMinionsKilled,
     };
   } catch (e) {
-    console.error("Error fetching match stats:", e.message);
-    return null;
+    console.error(`Error fetching match stats:`, e.message);
+    return null; // Return null so the code can continue without match data
   }
 }
 
@@ -48,7 +81,10 @@ module.exports = async (client) => {
 
   try {
     const allPlayers = await db.getAllPlayers();
-    if (allPlayers.length === 0) return;
+    if (allPlayers.length === 0) {
+      console.log("No players to check.");
+      return;
+    }
 
     for (const player of allPlayers) {
       // Fetch Fresh Rank
@@ -78,14 +114,13 @@ module.exports = async (client) => {
         losses: currentData.losses,
       });
 
-      // IF CHANGED: Post Update
       if (rankChanged || lpChange !== 0) {
         const targetChannelId = await db.getChannel(player.guild_id);
         if (targetChannelId) {
           try {
             const channel = await client.channels.fetch(targetChannelId);
             if (channel) {
-              // NEW: Fetch Match Data Context
+              // Fetch Match Data Context using the correct region
               const matchStats = await getLastMatchStats(
                 player.puuid,
                 player.region
@@ -107,9 +142,7 @@ module.exports = async (client) => {
                 matchStats
               );
               await channel.send({ embeds: [embed] });
-              console.log(
-                `-> Posted update for ${player.gameName} with Match Details`
-              );
+              console.log(`-> Posted update for ${player.gameName}`);
             }
           } catch (err) {
             console.error(`-> Error posting:`, err.message);

@@ -10,8 +10,10 @@ module.exports = {
   async execute(client) {
     console.log(`Logged in as ${client.user.tag}!`);
 
+    // 1. Wait for Database to be 100% Ready
     await db.setupDatabase();
 
+    // 2. Schedule the Daily Timer
     cron.schedule(config.CRON_SCHEDULE, () => dailyLpCheckTask(client), {
       timezone: config.CRON_TIMEZONE,
     });

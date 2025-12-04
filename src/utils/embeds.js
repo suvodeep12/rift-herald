@@ -40,6 +40,15 @@ function getRankEmoji(guild, tier) {
 }
 
 /**
+ * Helper to generate a safe OP.GG URL
+ */
+function getOpGgUrl(region, gameName, tagLine) {
+  const safeName = encodeURIComponent(gameName);
+  const safeTag = encodeURIComponent(tagLine);
+  return `https://www.op.gg/summoners/${region}/${safeName}-${safeTag}`;
+}
+
+/**
  * Generates the Daily Update Embed
  */
 function createUpdateEmbed(player, oldData, newData, guild, matchData = null) {
@@ -47,18 +56,16 @@ function createUpdateEmbed(player, oldData, newData, guild, matchData = null) {
   const isPromotion = lpChange > 0;
   const emoji = getRankEmoji(guild, newData.tier);
 
-  // Rank String
   const rankDisplay = `${emoji} ${newData.tier} ${newData.rank}`.trim();
+  const url = getOpGgUrl(player.region, player.gameName, player.tagLine);
 
   const embed = new EmbedBuilder()
     .setTitle(`${player.gameName} #${player.tagLine}`)
-    .setURL(
-      `https://www.op.gg/summoners/${player.region}/${player.gameName}-${player.tagLine}`
-    )
+    .setURL(url) // <--- FIXED: Now uses the safe URL
     .setColor(RANK_COLORS[newData.tier] || RANK_COLORS.UNRANKED)
     .setTimestamp();
 
-  // 1. Set Thumbnail (If we have match data, show the Champion! Otherwise show profile icon)
+  // Thumbnail: Champion or Profile Icon
   if (matchData) {
     embed.setThumbnail(
       `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/champion/${matchData.championName}.png`
@@ -71,7 +78,6 @@ function createUpdateEmbed(player, oldData, newData, guild, matchData = null) {
     );
   }
 
-  // 2. Build Description
   let desc = "";
 
   if (oldData.tier !== newData.tier) {
@@ -83,16 +89,15 @@ function createUpdateEmbed(player, oldData, newData, guild, matchData = null) {
     }**!\n\n`;
   }
 
-  // 3. Add Match Context (The "God Mode" part)
+  // Match Context
   if (matchData) {
-    const kda = `${matchData.kills}/${matchData.deaths}/${matchData.assists}`;
     const outcome = matchData.win ? "Victory 🏆" : "Defeat 💀";
+    const kda = `${matchData.kills}/${matchData.deaths}/${matchData.assists}`;
     desc += `**Last Game:** ${outcome}\n**Champion:** ${matchData.championName} (${kda})\n**CS:** ${matchData.cs}\n`;
   }
 
   embed.setDescription(desc);
 
-  // 4. Fields
   const arrow = lpChange > 0 ? "📈" : "📉";
   embed.addFields(
     { name: "Current Rank", value: rankDisplay, inline: true },
@@ -122,11 +127,12 @@ function createProfileEmbed(data, gameName, tagLine, guild) {
     data.tier === "UNRANKED"
       ? "Unranked"
       : `${emoji} ${data.tier} ${data.rank}`.trim();
+  const url = getOpGgUrl("sg2", gameName, tagLine); // defaulting to sg2 or pass region if available
 
   return new EmbedBuilder()
     .setColor(RANK_COLORS[data.tier] || RANK_COLORS.UNRANKED)
     .setTitle(`Profile: ${gameName}#${tagLine}`)
-    .setURL(`https://www.op.gg/summoners/sg/${gameName}-${tagLine}`)
+    .setURL(url) // <--- FIXED
     .setThumbnail(
       `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${
         data.profileIconId || 29
