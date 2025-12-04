@@ -42,12 +42,12 @@ function getRankEmoji(guild, tier) {
 /**
  * Generates the Daily Update Embed
  */
-function createUpdateEmbed(player, oldData, newData, guild) {
+function createUpdateEmbed(player, oldData, newData, guild, matchData = null) {
   const lpChange = newData.lp - oldData.lp;
   const isPromotion = lpChange > 0;
   const emoji = getRankEmoji(guild, newData.tier);
 
-  // Rank String (e.g. "<:diamond:123> DIAMOND IV")
+  // Rank String
   const rankDisplay = `${emoji} ${newData.tier} ${newData.rank}`.trim();
 
   const embed = new EmbedBuilder()
@@ -55,43 +55,60 @@ function createUpdateEmbed(player, oldData, newData, guild) {
     .setURL(
       `https://www.op.gg/summoners/${player.region}/${player.gameName}-${player.tagLine}`
     )
-    .setThumbnail(
-      `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${
-        player.profileIconId || 29
-      }.png`
-    )
     .setColor(RANK_COLORS[newData.tier] || RANK_COLORS.UNRANKED)
     .setTimestamp();
 
-  if (oldData.tier !== newData.tier) {
-    // TIER CHANGE
-    const oldEmoji = getRankEmoji(guild, oldData.tier);
-    embed.setDescription(
-      `## ${
-        isPromotion ? "🚀 PROMOTION" : "📉 DEMOTION"
-      }\nMoved from ${oldEmoji} **${oldData.tier}** to ${emoji} **${
-        newData.tier
-      }**!`
+  // 1. Set Thumbnail (If we have match data, show the Champion! Otherwise show profile icon)
+  if (matchData) {
+    embed.setThumbnail(
+      `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/champion/${matchData.championName}.png`
     );
   } else {
-    // LP CHANGE
-    const arrow = lpChange > 0 ? "📈" : "📉"; // You can replace these with custom emojis too if you have them
-    embed.addFields(
-      { name: "Rank", value: rankDisplay, inline: true },
-      {
-        name: "LP Change",
-        value: `${arrow} **${newData.lp} LP** (${
-          lpChange >= 0 ? "+" : ""
-        }${lpChange})`,
-        inline: true,
-      },
-      {
-        name: "Win Rate",
-        value: `${calculateWinRate(newData.wins, newData.losses)}%`,
-        inline: true,
-      }
+    embed.setThumbnail(
+      `https://ddragon.leagueoflegends.com/cdn/14.23.1/img/profileicon/${
+        player.profileIconId || 29
+      }.png`
     );
   }
+
+  // 2. Build Description
+  let desc = "";
+
+  if (oldData.tier !== newData.tier) {
+    const oldEmoji = getRankEmoji(guild, oldData.tier);
+    desc += `## ${
+      isPromotion ? "🚀 PROMOTION" : "📉 DEMOTION"
+    }\nMoved from ${oldEmoji} **${oldData.tier}** to ${emoji} **${
+      newData.tier
+    }**!\n\n`;
+  }
+
+  // 3. Add Match Context (The "God Mode" part)
+  if (matchData) {
+    const kda = `${matchData.kills}/${matchData.deaths}/${matchData.assists}`;
+    const outcome = matchData.win ? "Victory 🏆" : "Defeat 💀";
+    desc += `**Last Game:** ${outcome}\n**Champion:** ${matchData.championName} (${kda})\n**CS:** ${matchData.cs}\n`;
+  }
+
+  embed.setDescription(desc);
+
+  // 4. Fields
+  const arrow = lpChange > 0 ? "📈" : "📉";
+  embed.addFields(
+    { name: "Current Rank", value: rankDisplay, inline: true },
+    {
+      name: "LP Change",
+      value: `${arrow} **${newData.lp} LP** (${
+        lpChange >= 0 ? "+" : ""
+      }${lpChange})`,
+      inline: true,
+    },
+    {
+      name: "Total Win Rate",
+      value: `${calculateWinRate(newData.wins, newData.losses)}%`,
+      inline: true,
+    }
+  );
 
   return embed;
 }
