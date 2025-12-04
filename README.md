@@ -1,75 +1,154 @@
-# Daily Rift Herald
+# 👾 Rift Herald
 
-[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)
-[![Discord.js](https://img.shields.io/badge/Discord.js-v14-7289DA?logo=discord&logoColor=white)](https://discord.js.org)
-[![Node.js](https://img.shields.io/badge/Node.js-20.x-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Node](https://img.shields.io/badge/node-v16.9.0+-green.svg)
+![Discord.js](https://img.shields.io/badge/discord.js-v14-5865F2.svg)
 
-A sophisticated Discord bot built with Node.js and the Riot Games API to track and announce daily League of Legends ranked LP changes with interactive slash commands.
+**Rift Herald** is a professional-grade Discord bot designed to track League of Legends ranked progress. It provides automated daily LP updates, live server leaderboards, and detailed profile lookups with a focus on visual elegance and reliability.
+
+Unlike basic bots, Rift Herald tracks players by their **PUUID**, meaning it never breaks—even if a player changes their Riot ID.
 
 ---
 
-## ✨ Features
+## ✨ Key Features
 
-- **Automated Daily Updates:** Automatically posts a summary of LP gains or losses at a configurable time.
-- **Interactive Commands:** Manage the bot entirely through intuitive slash commands.
-- **Case-Insensitive Tracking:** Prevents duplicate entries for players (e.g., `Player#NA1` is the same as `player#na1`).
-- **User-Friendly Autocomplete:** Easily select players to untrack from a dynamic dropdown list.
-- **Clean & Modular Codebase:** Professionally structured for easy maintenance and future feature development.
+- **🔄 Automated Daily Updates:** Automatically posts LP gains/losses, promotions, and demotions to a configured channel every day.
+- **🏆 Live Leaderboard:** A real-time, sorted leaderboard for your server, complete with rank icons and win rates.
+- **🆔 PUUID Tracking:** Tracks the _account_, not the name. Handles name changes automatically.
+- **🏢 Multi-Guild Support:** Works across multiple Discord servers with independent tracking lists.
+- **🎨 Visual Elegance:** Uses custom server emojis for Rank Icons (Iron - Challenger) and dynamic color-coded embeds.
+- **⚡ Rate Limit Handling:** Smart queuing system to respect Riot API limits.
 
-## 🤖 Bot Commands
+---
 
-- `/track <riot_id>`: Adds a new player to the tracking list.
-- `/untrack <player>`: Removes a player from the list using an autocomplete dropdown.
-- `/list`: Displays an embed showing all currently tracked players and their last known rank.
-- _(Coming Soon: `/profile`)_
+## 🛠️ Prerequisites
 
-## 🛠️ Tech Stack
+- **Node.js** (v16.9.0 or higher)
+- **NPM** or **Yarn**
+- **Discord Bot Token** ([Get it here](https://discord.com/developers/applications))
+- **Riot Games API Key** ([Get it here](https://developer.riotgames.com/))
 
-- **Backend:** Node.js
-- **Discord API:** Discord.js v14
-- **Riot Games API:** Twisted.js & Node-Fetch
-- **Database:** SQLite3
-- **Scheduling:** Node-Cron
+---
 
-## 🚀 Setup and Installation
+## 🚀 Installation & Setup
 
-Follow these steps to run your own instance of Daily Rift Herald.
+### 1. Clone the Repository
 
-1.  **Clone the Repository**
+```bash
+git clone https://github.com/yourusername/rift-herald.git
+cd rift-herald
+```
 
-    ```bash
-    git clone https://github.com/YourUsername/daily-rift-herald.git
-    cd daily-rift-herald
-    ```
+### 2. Install Dependencies
 
-2.  **Install Dependencies**
+```bash
+npm install
+```
 
-    ```bash
-    npm install
-    ```
+### 3. Configure Environment
 
-3.  **Set Up Environment Variables**
-    Create a `.env` file in the root directory and populate it with your secret keys. Use the `.env.example` as a template.
+Create a `.env` file in the root directory:
 
-    ```env
-    DISCORD_TOKEN=YOUR_DISCORD_BOT_TOKEN
-    RIOT_API_KEY=YOUR_RIOT_GAMES_API_KEY
-    TARGET_DISCORD_CHANNEL_ID=THE_ID_OF_THE_CHANNEL_FOR_DAILY_POSTS
-    CLIENT_ID=YOUR_DISCORD_BOT_APPLICATION_ID
-    ```
+```bash
+touch .env
+```
 
-4.  **Register Slash Commands**
-    Run this script once to register your commands with Discord.
+Open it and paste the following configuration:
 
-    ```bash
-    node deploy-commands.js
-    ```
+```env
+# Discord Configuration
+DISCORD_TOKEN=your_discord_bot_token
+CLIENT_ID=your_discord_application_id
 
-5.  **Start the Bot**
-    ```bash
-    node src/index.js
-    ```
+# Riot Games Configuration
+RIOT_API_KEY=your_riot_api_key
+
+# Cron Schedule (Default: Daily at 8:00 PM Asia/Kolkata)
+CRON_SCHEDULE=0 20 * * *
+CRON_TIMEZONE=Asia/Kolkata
+```
+
+### 4. Deploy Slash Commands
+
+Register the commands with Discord:
+
+```bash
+node deploy-commands.js
+```
+
+### 5. Start the Bot
+
+```bash
+node src/index.js
+```
+
+_(For production, use PM2: `pm2 start src/index.js --name "rift-herald"`)_
+
+---
+
+## 🎨 Visual Setup (Important)
+
+For the **Leaderboard** and **Rank Updates** to look 10/10, you must upload custom emojis to your Discord server.
+
+1.  Go to **Server Settings > Emoji**.
+2.  Upload rank icons (download them from the LoL Wiki or similar).
+3.  **Name them exactly like this:**
+    - `iron`, `bronze`, `silver`, `gold`, `platinum`, `emerald`, `diamond`, `master`, `grandmaster`, `challenger`.
+
+The bot automatically detects these emojis and renders them in the embeds.
+
+---
+
+## 🎮 Commands
+
+| Command                                         | Description                                           |
+| :---------------------------------------------- | :---------------------------------------------------- |
+| `/setup channel:<#channel>`                     | **(Admin)** Configure where daily updates are posted. |
+| `/track riot_id:<Name#Tag> region:<SG2/NA1...>` | Start tracking a player's ranked progress.            |
+| `/untrack player:<Select from list>`            | Stop tracking a player (Autocomplete supported).      |
+| `/lolranking`                                   | Show the server's live ranked leaderboard.            |
+| `/lolprofile riot_id:<Name#Tag>`                | Lookup a player's current rank and stats instantly.   |
+
+---
+
+## 📂 Project Structure
+
+```text
+rift-herald/
+├── data/                  # SQLite Database storage
+├── src/
+│   ├── commands/          # Slash Command definitions
+│   ├── core/              # Database & Riot API Logic
+│   ├── events/            # Discord Event Handlers
+│   ├── tasks/             # Cron Jobs (Daily LP Check)
+│   ├── utils/             # Embed builders & helpers
+│   └── index.js           # Entry point
+├── .env                   # Secrets
+└── deploy-commands.js     # Command registration script
+```
+
+---
+
+## ⚠️ Maintenance Note
+
+If you are using a standard **Riot Development Key**, it expires every **24 hours**.
+If the bot starts throwing `403 Forbidden` errors:
+
+1.  Go to [Riot Developer Portal](https://developer.riotgames.com/).
+2.  Regenerate Key.
+3.  Update `.env`.
+4.  Restart Bot.
+
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+---
+
+**Built with ❤️ by [Your Name]**
+
+```
+
+```

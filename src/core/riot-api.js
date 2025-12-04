@@ -1,36 +1,38 @@
-// The complete, simplified content for src/core/riot-api.js
-const { RiotApi, LolApi } = require("twisted");
-const fetch = require("node-fetch");
+const { RiotApi, LolApi, Constants } = require("twisted");
 
-const riotApi = new RiotApi({ key: process.env.RIOT_API_KEY });
-const lolApi = new LolApi({ key: process.env.RIOT_API_KEY });
+const apiKey = process.env.RIOT_API_KEY ? process.env.RIOT_API_KEY.trim() : "";
+
+const riotApi = new RiotApi({ key: apiKey });
+const lolApi = new LolApi({ key: apiKey });
 
 async function getRankedData(gameName, tagLine) {
   try {
+    const cleanName = gameName.trim();
+    const cleanTag = tagLine.trim();
+
+    console.log(`Checking: ${cleanName} #${cleanTag}`);
+
     const accountData = await riotApi.Account.getByRiotId(
-      gameName,
-      tagLine,
-      "asia"
+      cleanName,
+      cleanTag,
+      Constants.RegionGroups.ASIA
     );
+
     const puuid = accountData.response.puuid;
 
-    const summonerData = await lolApi.Summoner.getByPUUID(puuid, "sg2");
-    const summonerId = summonerData.response.id;
+    const leagueData = await lolApi.League.byPUUID(
+      puuid,
+      Constants.Regions.SINGAPORE
+    );
 
-    const url = `https://sg2.api.riotgames.com/lol/league/v4/entries/by-summoner/${summonerId}`;
-    const fetchResponse = await fetch(url, {
-      headers: { "X-Riot-Token": process.env.RIOT_API_KEY },
-    });
+    const leagueEntries = leagueData.response;
 
-    if (!fetchResponse.ok)
-      throw new Error(`Request failed with status ${fetchResponse.status}`);
-
-    const leagueEntries = await fetchResponse.json();
     const soloQueueData = leagueEntries.find(
       (entry) => entry.queueType === "RANKED_SOLO_5x5"
     );
 
     if (!soloQueueData) {
+      console.log(` -> Success: Unranked`);
       return {
         success: true,
         puuid: puuid,
@@ -42,22 +44,30 @@ async function getRankedData(gameName, tagLine) {
       };
     }
 
-    // --- THIS IS THE KEY ---
-    // The API response already includes total wins and losses for the season.
+    console.log(` -> Success: ${soloQueueData.tier} ${soloQueueData.rank}`);
     return {
       success: true,
       puuid: puuid,
       lp: soloQueueData.leaguePoints,
       tier: soloQueueData.tier,
       rank: soloQueueData.rank,
-      wins: soloQueueData.wins, // Add this
-      losses: soloQueueData.losses, // Add this
+      wins: soloQueueData.wins,
+      losses: soloQueueData.losses,
     };
   } catch (error) {
-    console.error(`Riot API Error for ${gameName}#${tagLine}:`, error.message);
+    const status = error.statusCode || "Unknown";
+
+    if (status === 404) {
+      console.log(` -> Not Found (404)`);
+      return { success: false, error: "Player not found" };
+    }
+
+    console.error(
+      ` -> Error (${status}):`,
+      error.body?.message || error.message
+    );
     return { success: false, error: error.message };
   }
 }
 
-// We only need to export one function now.
 module.exports = { getRankedData };

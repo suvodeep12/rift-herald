@@ -1,12 +1,15 @@
 // The new, lean main file: src/index.js
-require("dotenv").config({ path: "../.env" });
+require("dotenv").config({ path: ".env" });
+
+require("dotenv").config(); // This line should already be there
+console.log("DEBUG KEY CHECK:", process.env.RIOT_API_KEY); // <--- Add this
+
 const fs = require("fs");
 const path = require("path");
 const { Client, Collection, GatewayIntentBits } = require("discord.js");
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-// --- Command Loader ---
 client.commands = new Collection();
 const commandsPath = path.join(__dirname, "commands");
 const commandFiles = fs
@@ -18,8 +21,6 @@ for (const file of commandFiles) {
   client.commands.set(command.data.name, command);
 }
 
-// --- Event Loader ---
-// This dynamically reads your event files and registers them.
 const eventsPath = path.join(__dirname, "events");
 const eventFiles = fs
   .readdirSync(eventsPath)
@@ -34,5 +35,6 @@ for (const file of eventFiles) {
   }
 }
 
-// --- Login ---
 client.login(process.env.DISCORD_TOKEN);
+
+console.log("Riot API Key loaded:", process.env.RIOT_API_KEY?.slice(0, 5));

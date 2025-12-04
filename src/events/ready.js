@@ -5,8 +5,8 @@ const dailyLpCheckTask = require("../tasks/dailyLpCheck");
 const config = require("../config");
 
 module.exports = {
-  name: Events.ClientReady, // This identifies the event
-  once: true, // This event should only run once
+  name: Events.ClientReady,
+  once: true,
   async execute(client) {
     console.log(`Logged in as ${client.user.tag}!`);
 

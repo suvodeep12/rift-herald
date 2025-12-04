@@ -3,7 +3,7 @@ const db = require("../core/database");
 const { getRankedData } = require("../core/riot-api");
 const config = require("../config");
 
-// Helper objects for sorting
+// Sorting Values
 const rankValues = {
   IRON: 0,
   BRONZE: 400,
@@ -15,9 +15,11 @@ const rankValues = {
   MASTER: 2800,
   GRANDMASTER: 2800,
   CHALLENGER: 2800,
+  UNRANKED: -100,
 };
 const divisionValues = { IV: 0, III: 100, II: 200, I: 300 };
 
+// 1. Map API Tier names to your Discord Emoji names
 const rankEmojiMap = {
   IRON: "iron",
   BRONZE: "bronze",
@@ -36,108 +38,108 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 module.exports = {
   data: new SlashCommandBuilder()
     .setName("lolranking")
-    .setDescription(
-      "Displays a live ranked leaderboard with season win/loss records."
-    ),
+    .setDescription("Displays a live ranked leaderboard for this server."),
 
   async execute(interaction) {
     await interaction.deferReply();
 
-    const trackedPlayers = await db.getAllTrackedPlayers();
-    if (trackedPlayers.length === 0) {
-      return interaction.editReply("There are no players to track.");
-    }
-
-    await interaction.editReply(
-      `Fetching live data for ${trackedPlayers.length} players...`
+    const allPlayers = await db.getAllPlayers();
+    const trackedPlayers = allPlayers.filter(
+      (p) => p.guild_id === interaction.guildId
     );
 
-    const fetchedPlayers = [];
-    let successfulFetches = 0;
-    for (const player of trackedPlayers) {
-      const data = await getRankedData(player.gameName, player.tagLine);
-      if (data.success) {
-        fetchedPlayers.push({ ...player, ...data });
-        successfulFetches++;
-      }
-      await sleep(100);
-    }
-
-    if (fetchedPlayers.length === 0) {
+    if (trackedPlayers.length === 0) {
       return interaction.editReply(
-        "Could not fetch live data for any players."
+        "❌ No players are being tracked. Use `/track`."
       );
     }
 
-    const playersWithScores = fetchedPlayers.map((p) => {
-      let score = 0;
-      if (p.tier && p.tier !== "UNRANKED") {
-        score =
-          (rankValues[p.tier] || 0) + (divisionValues[p.rank] || 0) + p.lp;
+    await interaction.editReply(
+      `🔄 Fetching live data for ${trackedPlayers.length} players...`
+    );
+
+    const fetchedPlayers = [];
+
+    // Fetch live data
+    for (const player of trackedPlayers) {
+      const data = await getRankedData(player.gameName, player.tagLine);
+
+      if (data.success) {
+        fetchedPlayers.push({ ...player, ...data });
+        // Silent DB update to keep data fresh
+        await db.addPlayer(player.guild_id, {
+          puuid: data.puuid,
+          gameName: player.gameName,
+          tagLine: player.tagLine,
+          region: player.region,
+          profileIconId: player.profileIconId,
+          lp: data.lp,
+          tier: data.tier,
+          rank: data.rank,
+          wins: data.wins,
+          losses: data.losses,
+        });
+      } else {
+        // Fallback to cached data
+        fetchedPlayers.push({
+          ...player,
+          lp: player.lastLP,
+          tier: player.lastTier,
+          rank: player.lastRank,
+          wins: player.lastWins,
+          losses: player.lastLosses,
+        });
       }
-      return { ...p, score };
+      await sleep(200);
+    }
+
+    // Sort by Score
+    const sortedPlayers = fetchedPlayers.sort((a, b) => {
+      const scoreA =
+        (rankValues[a.tier] || 0) + (divisionValues[a.rank] || 0) + a.lp;
+      const scoreB =
+        (rankValues[b.tier] || 0) + (divisionValues[b.rank] || 0) + b.lp;
+      return scoreB - scoreA;
     });
 
-    const sortedPlayers = playersWithScores.sort((a, b) => b.score - a.score);
-
+    // Build Embed
     const embed = new EmbedBuilder()
-      .setColor(config.EMBED_COLORS.info)
-      .setTitle("🏆 Live Server Leaderboard")
+      .setColor(0x0099ff)
+      .setTitle(`🏆 Leaderboard: ${interaction.guild.name}`)
       .setTimestamp()
-      .setFooter({ text: "Daily Rift Herald" });
+      .setFooter({ text: `Updated: ${new Date().toLocaleTimeString()}` });
 
     let description = "";
+
     sortedPlayers.forEach((p, index) => {
-      const rankEmojiName = rankEmojiMap[p.tier];
-      const rankEmoji = rankEmojiName
-        ? interaction.guild.emojis.cache.find(
-            (emoji) => emoji.name === rankEmojiName
-          ) || ""
+      // 2. Find the Emoji
+      const tierName = p.tier || "UNRANKED";
+      const emojiName = rankEmojiMap[tierName];
+
+      // Look up the emoji in the Guild's cache
+      const customEmoji = emojiName
+        ? interaction.guild.emojis.cache.find((e) => e.name === emojiName)
         : "";
 
       const rankString =
-        p.tier && p.tier !== "UNRANKED" ? `${p.tier} ${p.rank}` : "Unranked";
+        p.tier === "UNRANKED" ? "Unranked" : `${p.tier} ${p.rank}`;
 
-      const primaryLine = `**${index + 1}.** ${rankEmoji} **${p.gameName}#${
-        p.tagLine
-      }** - ${rankString} (${p.lp} LP)`;
-
-      description += primaryLine + "\n";
-
+      // Calculate Win Rate
       const totalGames = p.wins + p.losses;
-      if (totalGames > 0) {
-        const winrate = (p.wins / totalGames) * 100;
+      const winRate =
+        totalGames > 0 ? ((p.wins / totalGames) * 100).toFixed(1) + "%" : "0%";
 
-        let trendEmoji;
-        if (winrate > 50) {
-          trendEmoji =
-            interaction.guild.emojis.cache.find(
-              (emoji) => emoji.name === "arrow_up"
-            ) || "🔼";
-        } else if (winrate < 50) {
-          trendEmoji =
-            interaction.guild.emojis.cache.find(
-              (emoji) => emoji.name === "small_red_triangle_down"
-            ) || "🔻";
-        } else {
-          // Exactly 50%
-          trendEmoji =
-            interaction.guild.emojis.cache.find(
-              (emoji) => emoji.name === "heavy_minus_sign"
-            ) || "➖";
-        }
+      // Placement Medals
+      let placementEmoji = `**#${index + 1}**`;
+      if (index === 0) placementEmoji = "🥇";
+      if (index === 1) placementEmoji = "🥈";
+      if (index === 2) placementEmoji = "🥉";
 
-        const statsLine = `> ${trendEmoji}  **W/L:** ${p.wins}W ${
-          p.losses
-        }L  •  **WR:** ${winrate.toFixed(1)}%`;
-        description += statsLine + "\n";
-      }
-
-      if (index < sortedPlayers.length - 1) {
-        description += "\n";
-      }
+      // 3. Construct the Line (Emoji + Text)
+      description += `${placementEmoji} **${p.gameName}** \n└ ${customEmoji} ${rankString} (${p.lp} LP) • WR: ${winRate}\n\n`;
     });
-    embed.setDescription(description);
+
+    embed.setDescription(description || "No data.");
 
     await interaction.editReply({ content: "", embeds: [embed] });
   },
